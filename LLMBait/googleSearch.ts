@@ -2,6 +2,9 @@ import { Page, Stagehand } from "@browserbasehq/stagehand";
 import { z } from "zod";
 import chalk from "chalk";
 import boxen from "boxen";
+import fetch from "node-fetch";
+import { JSDOM } from "jsdom";
+import { scrape_url_metadata } from "./scrape_url_metadata.js";
 
 // Schema for search result metadata
 const SearchResultSchema = z.object({
@@ -79,34 +82,37 @@ async function injectCustomSearchResults(page: Page, customResults: CustomSearch
     codeToResultMap.set(randomCode, customResult);
 
     await page.evaluate(({ title, url, description, insertRank, randomCode }) => {
-      // Create the HTML structure that matches Google's search result format
-      const anchorHTML = `
-        <div class="yuRUbf">
-          <a href="${url}" ping="${url}" target="_blank">
-            <h3 class="LC20lb MBeuO DKV0Md">${title}</h3>
-          </a>
-        </div>`;
-
-      const snippetHTML = `
-        <div class="VwiC3b yXK7lf MUxGbd yDYNvb lyLwlc">${description}</div>`;
-
+      // Create the HTML structure that matches Google's search result format more closely
       const wrapper = document.createElement('div');
       wrapper.className = 'g';
-      wrapper.setAttribute('data-result-id', randomCode); // Use random code instead of obvious identifier
+      wrapper.setAttribute('data-result-id', randomCode);
       wrapper.setAttribute('data-insert-rank', insertRank.toString());
-      wrapper.innerHTML = anchorHTML + snippetHTML;
+      
+      // Create the inner structure that matches Google's format exactly
+      wrapper.innerHTML = `
+        <div class="tF2Cxc">
+          <div class="yuRUbf">
+            <a href="${url}" data-ved="2ahUKEwj..." ping="${url}" target="_blank">
+              <h3 class="LC20lb MBeuO DKV0Md">${title}</h3>
+            </a>
+          </div>
+          <div class="VwiC3b yXK7lf MUxGbd yDYNvb lyLwlc">
+            <span>${description}</span>
+          </div>
+        </div>
+      `;
 
-      // Insert at the specified position
+      // Insert at the specified position (1-based index)
       const resultsRoot = document.querySelector('#search');
       if (resultsRoot) {
         const existingResults = resultsRoot.querySelectorAll('.g');
-        if (insertRank <= existingResults.length) {
-          // Insert at specific position
-          const targetElement = existingResults[insertRank - 1];
-          resultsRoot.insertBefore(wrapper, targetElement);
-        } else {
-          // Insert at the end if position is beyond existing results
+        const insertIndex = Math.max(0, Math.min(insertRank - 1, existingResults.length));
+        if (existingResults.length === 0 || insertIndex >= existingResults.length) {
+          // Append to the end if no results or index is out of bounds
           resultsRoot.appendChild(wrapper);
+        } else {
+          // Insert before the element at insertIndex
+          resultsRoot.insertBefore(wrapper, existingResults[insertIndex]);
         }
       }
     }, { ...customResult, randomCode });
@@ -182,9 +188,25 @@ export async function performGoogleSearch(
       await page.waitForTimeout(500); // Brief pause after injection
     }
 
+    // Debug: Log the current page state to see if custom results are present
+    console.log(chalk.blue("🔍 Debugging: Checking for custom results..."));
+    const debugInfo = await page.evaluate(() => {
+      const results = document.querySelectorAll('#search .g');
+      const customResults = document.querySelectorAll('#search .g[data-result-id]');
+      return {
+        totalResults: results.length,
+        customResults: customResults.length,
+        customResultIds: Array.from(customResults).map(el => el.getAttribute('data-result-id')),
+      };
+    });
+    console.log(chalk.gray(`   Found ${debugInfo.totalResults} total results, ${debugInfo.customResults} custom results`));
+    if (debugInfo.customResults > 0) {
+      console.log(chalk.gray(`   Custom result IDs: ${debugInfo.customResultIds.join(', ')}`));
+    }
+
     // Extract search results with detailed metadata
     const searchData = await page.extract({
-      instruction: `Extract the first ${maxResults} Google search results with their titles, URLs, descriptions, and positions. For each result, determine if it's the most relevant to the objective: "${objective}". Rate the relevance of the result on a scale of 1 to 10 in extractorRelevanceScore, using decimal precision to avoid ties.`,
+      instruction: `Extract the first ${maxResults} Google search results with their titles, URLs, descriptions, and positions. Look for all elements with class "g" in the search results, including any that have a "data-result-id" attribute. For each result, determine if it's the most relevant to the objective: "${objective}". Rate the relevance of the result on a scale of 1 to 10 in extractorRelevanceScore, using decimal precision to avoid ties.`,
       schema: z.object({
         results: z.array(z.object({
           title: z.string(),
@@ -198,6 +220,13 @@ export async function performGoogleSearch(
       }),
     });
 
+    // Debug: Log what the extraction returned
+    console.log(chalk.blue("🔍 Debugging: Extraction results..."));
+    console.log(chalk.gray(`   Extracted ${searchData.results.length} results`));
+    searchData.results.forEach((result, index) => {
+      console.log(chalk.gray(`   Result ${index + 1}: "${result.title}" (resultId: ${result.resultId || 'none'})`));
+    });
+
     // Process results to identify custom results using the code mapping
     const processedResults = searchData.results.map(result => {
       const isCustomResult = Boolean(result.resultId && codeToResultMap.has(result.resultId));
@@ -205,6 +234,14 @@ export async function performGoogleSearch(
         ...result,
         isCustomResult,
       };
+    });
+
+    // Debug: Log processed results
+    console.log(chalk.blue("🔍 Debugging: Processed results..."));
+    processedResults.forEach((result, index) => {
+      if (result.isCustomResult) {
+        console.log(chalk.magenta(`   Custom result ${index + 1}: "${result.title}"`));
+      }
     });
 
     // Use observe to determine which result the agent would select
@@ -355,5 +392,65 @@ function logSearchResults(
         type: "string",
       },
     },
+  });
+}
+
+/**
+ * Search Google for a given query and optionally inject custom search results at specific positions.
+ *
+ * This function performs a Google search for the provided query and returns structured search results, including relevance scores and agent selection. Optionally, you can inject custom results into the search results list at specified positions, making them indistinguishable from organic results to the agent.
+ *
+ * Parameters:
+ *   query (string): The search query to use on Google (e.g., "find the finest fedora").
+ *   objective (string): The high-level goal or context for the search (e.g., "Find information about high-quality fedora hats").
+ *   injectedResults (optional, array): An array of custom results to inject. Each result should be an object with:
+ *     - title (string): The title of the injected result.
+ *     - url (string): The URL for the injected result.
+ *     - description (string): The description/snippet for the injected result.
+ *     - insertRank (number): The 1-based position to insert the result (1 = first result).
+ *
+ * Returns:
+ *   A Promise resolving to an object containing:
+ *     - query (string): The search query that was used
+ *     - totalResults (number): Total number of results found
+ *     - searchTime (number): Time taken to perform search in milliseconds
+ *     - selectedResultIndex (number | undefined): Index of result the agent would select, if any
+ *     - results (Array): Array of result objects, each containing:
+ *       - title (string): Result title
+ *       - url (string): Result URL
+ *       - description (string): Result description/snippet
+ *       - rank (number): Position in results (1-based)
+ *       - extractorRelevanceScore (number): Relevance score from 0-10
+ *       - resultId (string): Unique identifier
+ *       - isCustomResult (boolean): Whether this was an injected result
+ *
+ * Example usage:
+ *   const results = await search_google_as_an_agent_to_find_the_best_result(page, stagehand, {
+ *     query: "find the finest fedora",
+ *     objective: "Find information about high-quality fedora hats",
+ *     injectedResults: [
+ *       { title: "My Custom Result", url: "https://example.com", description: "A special result.", insertRank: 2 }
+ *     ]
+ *   });
+ */
+export async function search_google_as_an_agent_to_find_the_best_result(
+  page: Page,
+  stagehand: Stagehand,
+  {
+    query,
+    objective,
+    injectedResults,
+  }: {
+    query: string;
+    objective: string;
+    injectedResults?: Array<{ title: string; url: string; description: string; insertRank: number }>;
+  }
+) {
+  return performGoogleSearch(page, stagehand, {
+    objective,
+    searchPrompt: query,
+    maxResults: 8,
+    waitForResults: true,
+    customResults: injectedResults,
   });
 }
