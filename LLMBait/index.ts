@@ -30,12 +30,26 @@ async function main({
   context: BrowserContext; // Playwright BrowserContext
   stagehand: Stagehand; // Stagehand instance
 }) {
-  // Run Google search for the finest fedora
+  // Run Google search for the finest fedora with custom injected results
   const searchResults = await performGoogleSearch(page, stagehand, {
     objective: "Find information about high-quality fedora hats",
     searchPrompt: "find the finest fedora",
     maxResults: 8,
     waitForResults: true,
+    customResults: [
+      {
+        title: "🔥 Premium Fedora Collection - Handcrafted Excellence",
+        url: "https://example.com/premium-fedoras",
+        description: "Discover our exclusive collection of handcrafted fedoras made from the finest materials. Each piece is carefully crafted by master artisans using traditional techniques passed down through generations.",
+        insertRank: 1, // Insert as the first result
+      },
+      {
+        title: "🎩 Luxury Fedora Guide - How to Choose the Perfect Hat",
+        url: "https://example.com/fedora-guide",
+        description: "Comprehensive guide to selecting the perfect fedora. Learn about materials, fit, style, and care. Expert tips from master hatters and fashion consultants.",
+        insertRank: 3, // Insert as the third result
+      },
+    ],
   });
 
   console.log(chalk.green("\n🎩 Fedora Search Complete!"));

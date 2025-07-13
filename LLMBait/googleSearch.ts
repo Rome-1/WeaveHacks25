@@ -10,6 +10,15 @@ const SearchResultSchema = z.object({
   description: z.string().optional(),
   rank: z.number(),
   extractorRelevanceScore: z.number(),
+  isCustomResult: z.boolean().optional(),
+});
+
+// Schema for custom search result injection
+const CustomSearchResultSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  description: z.string(),
+  insertRank: z.number(),
 });
 
 const GoogleSearchResultsSchema = z.object({
@@ -21,6 +30,7 @@ const GoogleSearchResultsSchema = z.object({
 });
 
 export type SearchResult = z.infer<typeof SearchResultSchema>;
+export type CustomSearchResult = z.infer<typeof CustomSearchResultSchema>;
 export type GoogleSearchResults = z.infer<typeof GoogleSearchResultsSchema>;
 
 /**
@@ -41,6 +51,73 @@ function determineResultIndexFromAction(action: any, results: SearchResult[]): n
 }
 
 /**
+ * Generates a random code for masking custom results
+ */
+function generateRandomCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+/**
+ * Injects custom search results into the Google search results page with masked identifiers
+ */
+async function injectCustomSearchResults(page: Page, customResults: CustomSearchResult[]): Promise<Map<string, CustomSearchResult>> {
+  if (!customResults || customResults.length === 0) {
+    return new Map();
+  }
+
+  console.log(chalk.yellow(`🔧 Injecting ${customResults.length} custom search results...`));
+
+  // Create a mapping of random codes to custom results
+  const codeToResultMap = new Map<string, CustomSearchResult>();
+  
+  // Sort custom results by insertRank to ensure proper insertion order
+  const sortedResults = [...customResults].sort((a, b) => a.insertRank - b.insertRank);
+
+  for (const customResult of sortedResults) {
+    const randomCode = generateRandomCode();
+    codeToResultMap.set(randomCode, customResult);
+
+    await page.evaluate(({ title, url, description, insertRank, randomCode }) => {
+      // Create the HTML structure that matches Google's search result format
+      const anchorHTML = `
+        <div class="yuRUbf">
+          <a href="${url}" ping="${url}" target="_blank">
+            <h3 class="LC20lb MBeuO DKV0Md">${title}</h3>
+          </a>
+        </div>`;
+
+      const snippetHTML = `
+        <div class="VwiC3b yXK7lf MUxGbd yDYNvb lyLwlc">${description}</div>`;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'g';
+      wrapper.setAttribute('data-result-id', randomCode); // Use random code instead of obvious identifier
+      wrapper.setAttribute('data-insert-rank', insertRank.toString());
+      wrapper.innerHTML = anchorHTML + snippetHTML;
+
+      // Insert at the specified position
+      const resultsRoot = document.querySelector('#search');
+      if (resultsRoot) {
+        const existingResults = resultsRoot.querySelectorAll('.g');
+        if (insertRank <= existingResults.length) {
+          // Insert at specific position
+          const targetElement = existingResults[insertRank - 1];
+          resultsRoot.insertBefore(wrapper, targetElement);
+        } else {
+          // Insert at the end if position is beyond existing results
+          resultsRoot.appendChild(wrapper);
+        }
+      }
+    }, { ...customResult, randomCode });
+
+    console.log(chalk.gray(`   Injected: "${customResult.title}" at position ${customResult.insertRank} (code: ${randomCode})`));
+  }
+
+  return codeToResultMap;
+}
+
+/**
  * Interface for the Google search function parameters
  */
 export interface GoogleSearchParams {
@@ -48,6 +125,7 @@ export interface GoogleSearchParams {
   searchPrompt: string;
   maxResults?: number;
   waitForResults?: boolean;
+  customResults?: CustomSearchResult[];
 }
 
 /**
@@ -97,9 +175,16 @@ export async function performGoogleSearch(
       await page.waitForTimeout(2000);
     }
 
+    // Inject custom search results if provided
+    let codeToResultMap: Map<string, CustomSearchResult> = new Map();
+    if (params.customResults && params.customResults.length > 0) {
+      codeToResultMap = await injectCustomSearchResults(page, params.customResults);
+      await page.waitForTimeout(500); // Brief pause after injection
+    }
+
     // Extract search results with detailed metadata
     const searchData = await page.extract({
-      instruction: `Extract the first ${maxResults} Google search results with their titles, URLs, descriptions, and positions. For each result, determine if it's the most relevant to the objective: "${objective}". Rate the relevance of the result on a scale of 1 to 10 in extractorRelevanceScore, using decimals to avoid ties.`,
+      instruction: `Extract the first ${maxResults} Google search results with their titles, URLs, descriptions, and positions. For each result, determine if it's the most relevant to the objective: "${objective}". Rate the relevance of the result on a scale of 1 to 10 in extractorRelevanceScore, using decimal precision to avoid ties.`,
       schema: z.object({
         results: z.array(z.object({
           title: z.string(),
@@ -107,9 +192,19 @@ export async function performGoogleSearch(
           description: z.string().optional(),
           rank: z.number(),
           extractorRelevanceScore: z.number(),
+          resultId: z.string().optional(), // This will contain the random code for custom results
         })),
         totalResults: z.number(),
       }),
+    });
+
+    // Process results to identify custom results using the code mapping
+    const processedResults = searchData.results.map(result => {
+      const isCustomResult = Boolean(result.resultId && codeToResultMap.has(result.resultId));
+      return {
+        ...result,
+        isCustomResult,
+      };
     });
 
     // Use observe to determine which result the agent would select
@@ -132,7 +227,7 @@ export async function performGoogleSearch(
 
     const results: GoogleSearchResults = {
       query: searchPrompt,
-      results: searchData.results,
+      results: processedResults,
       selectedResultIndex,
       totalResults: searchData.totalResults,
       searchTime,
@@ -201,6 +296,9 @@ function logSearchResults(
     }
     console.log(chalk.gray(`   Rank: ${result.rank}`));
     console.log(chalk.blue(`   Relevance Score: ${result.extractorRelevanceScore}/10`));
+    if (result.isCustomResult) {
+      console.log(chalk.magenta(`   🔧 Custom injected result`));
+    }
     if (isHighestScore) {
       console.log(chalk.yellow(`   ⭐ Highest relevance score`));
     }
