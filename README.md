@@ -10,25 +10,26 @@ I've been building sites and doing SEO since elementary school. I've seen the hi
 The future of search is agentic. Browser and computer use agents are already here. But will they click on your site? In other words, what's clickbait for Agents?
 
 ## What it does
-LLMBait is a revolutionary tool that simulates how AI agents interact with search results. Unlike traditional SEO tools that just analyze keywords, we run your experiments on agentic protocols on top of your content.
+LLMBait is a revolutionary tool that simulates how AI agents interact with search results. Unlike traditional SEO tools that just analyze keywords, I run your experiments on agentic protocols on top of your content.
 
-**Critically**: we aren't just asking agents which search result wins. We're running browser agents and following what they do.
+**Critically**: I am not just asking agents which search result wins. I'm running browser agents and following what they do.
 
-Our platform allows content owners to:
+My platform (well, chatbot MVP) allows content owners to:
 - Test how AI agents perceive their search result titles and meta descriptions
 - Inject custom search results into Google searches to see if agents would click on them
 - Optimize content specifically for AI agent interactions, not just human users
 - Monitor agent behavior in real-time using browser automation (locally, production coming soon)
 
-## How we built it
-- **Google Cloud ADK**: Powers our intelligent agents with state-of-the-art AI models
+## How I built it
+- **Google Cloud ADK**: Powers my intelligent agents with state-of-the-art AI models
+- **Google Cloud Run Service**: Hosting
 - **Weave**: Provides comprehensive monitoring and analytics for agent behavior
 - **BrowserBase / Stagehand**: Core browser automation functionality that simulates real agent interactions
 
 The system combines TypeScript backend for browser automation with Python agents for intelligent decision-making, creating a seamless bridge between AI agents and web content testing.
 
-## Challenges we ran into
-- Integrating multiple AI agent frameworks (Google ADK, Stagehand) into a cohesive system
+## Challenges I ran into
+- Integrating multiple AI agent frameworks (Google ADK, Stagehand) into a cohesive system, especially with async across Typescript and Python jointly
 - Ensuring realistic agent behavior that mirrors actual AI assistant interactions (injection scripts will have more features soon!)
 - Balancing speed and accuracy in agent decision-making processes (plans to offload to Fly.io for rapid concurrent runs)
 - Managing concurrent browser sessions for parallel agent testing (work in progress)
