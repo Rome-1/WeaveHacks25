@@ -1,67 +1,20 @@
 import datetime
 from zoneinfo import ZoneInfo
 from google.adk.agents import Agent
+from LLMBait.scrape_url_metadata import scrape_url_metadata
+from LLMBait.googleSearch import search_google_as_an_agent_to_find_the_best_result
 
-def get_weather(city: str) -> dict:
-    """Retrieves the current weather report for a specified city.
-
-    Args:
-        city (str): The name of the city for which to retrieve the weather report.
-
-    Returns:
-        dict: status and result or error msg.
-    """
-    if city.lower() == "new york":
-        return {
-            "status": "success",
-            "report": (
-                "The weather in New York is sunny with a temperature of 25 degrees"
-                " Celsius (77 degrees Fahrenheit)."
-            ),
-        }
-    else:
-        return {
-            "status": "error",
-            "error_message": f"Weather information for '{city}' is not available.",
-        }
-
-
-def get_current_time(city: str) -> dict:
-    """Returns the current time in a specified city.
-
-    Args:
-        city (str): The name of the city for which to retrieve the current time.
-
-    Returns:
-        dict: status and result or error msg.
-    """
-
-    if city.lower() == "new york":
-        tz_identifier = "America/New_York"
-    else:
-        return {
-            "status": "error",
-            "error_message": (
-                f"Sorry, I don't have timezone information for {city}."
-            ),
-        }
-
-    tz = ZoneInfo(tz_identifier)
-    now = datetime.datetime.now(tz)
-    report = (
-        f'The current time in {city} is {now.strftime("%Y-%m-%d %H:%M:%S %Z%z")}'
-    )
-    return {"status": "success", "report": report}
-
-
-root_agent = Agent(
-    name="weather_time_agent",
-    model="gemini-2.0-flash",
+LLMBait_agent = Agent(
+    name="LLMBait",
+    model="gemini-2.0-pro",
     description=(
-        "Agent to answer questions about the time and weather in a city."
+        "Helps users understand what browser agents will click on in a Google search. "
+        "Can simulate a search, inject a custom result (from a URL or manual entry), and show which result the agent would select."
     ),
     instruction=(
-        "You are a helpful agent who can answer user questions about the time and weather in a city."
+        "Prompt the user for a URL (to scrape) or manual entry (title, url, metadescription), and an objective. "
+        "Suggest a search query based on the objective, allow the user to edit, and confirm all inputs before running the search. "
+        "Present the results in a clear, readable format, highlighting the agent's selection and relevance scores."
     ),
-    tools=[get_weather, get_current_time],
+    tools=[scrape_url_metadata, search_google_as_an_agent_to_find_the_best_result],
 )
