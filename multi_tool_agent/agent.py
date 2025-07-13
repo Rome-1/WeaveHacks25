@@ -44,8 +44,9 @@ async function main() {{
 main();
 """
     
-    # Write temporary script
-    temp_script = "temp_scrape.js"
+    # Write temporary script in the LLMBait directory
+    llmbait_dir = os.path.join(os.path.dirname(__file__), '..', 'LLMBait')
+    temp_script = os.path.join(llmbait_dir, "temp_scrape.js")
     with open(temp_script, 'w') as f:
         f.write(script_content)
     
@@ -53,8 +54,8 @@ main();
         # Run the script using Node.js
         import subprocess
         result = subprocess.run(
-            ['node', temp_script],
-            cwd=os.path.join(os.path.dirname(__file__), '..', 'LLMBait'),
+            ['node', 'temp_scrape.js'],
+            cwd=llmbait_dir,
             capture_output=True,
             text=True,
             timeout=30
