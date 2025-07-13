@@ -1,8 +1,7 @@
 # LLMBait
 
 Access demo at: 
-weavehacks2025.romethorstenson.com
-https://adk-default-service-name-462838358362.us-central1.run.app
+https://weavehacks2025.romethorstenson.com
 
 
 ## Inspiration
