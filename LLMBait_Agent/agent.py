@@ -2,15 +2,19 @@ import datetime
 from zoneinfo import ZoneInfo
 import weave
 from google.adk.agents import Agent
+
+# # Import your tool wrappers (these call your TypeScript backend via Stagehand)
+# from tool_stagehand import search_google_as_an_agent_to_find_the_best_result
+# from my_tools import scrape_url_metadata
+
+weave.init('content-owner-search-optimizer')  # 🐝 New W&B project
+
+
 import asyncio
 import os
 import json
 from stagehand import Stagehand, StagehandConfig
 from typing import Optional, List, Dict, Any
-import requests
-from bs4 import BeautifulSoup
-
-weave.init('content-owner-search-optimizer')  # 🐝 New W&B project
 
 async def stagehand_act(url: str, action: str) -> dict:
     cfg = StagehandConfig(env="BROWSERBASE")     # reads env vars
@@ -73,7 +77,7 @@ main();
         if os.path.exists(temp_script):
             os.remove(temp_script)
 
-async def search_google_as_agent_stagehand(
+async def search_google_as_an_agent_to_find_the_best_result_async(
     query: str,
     objective: str,
     injectedResults: Optional[List[Dict[str, Any]]] = None
@@ -138,9 +142,8 @@ async function main() {{
 main();
 """
     
-    # Write temporary script in the LLMBait directory
-    llmbait_dir = os.path.join(os.path.dirname(__file__), '..', 'LLMBait')
-    temp_script = os.path.join(llmbait_dir, "temp_search.js")
+    # Write temporary script
+    temp_script = "temp_search.js"
     with open(temp_script, 'w') as f:
         f.write(script_content)
     
@@ -148,8 +151,8 @@ main();
         # Run the script using Node.js
         import subprocess
         result = subprocess.run(
-            ['node', 'temp_search.js'],
-            cwd=llmbait_dir,
+            ['node', temp_script],
+            cwd=os.path.join(os.path.dirname(__file__), '..', 'LLMBait'),
             capture_output=True,
             text=True,
             timeout=60
@@ -171,6 +174,129 @@ main();
         if os.path.exists(temp_script):
             os.remove(temp_script)
 
+# Use the Python implementation directly (no async needed)
+def scrape_url_metadata(url: str) -> Dict[str, Any]:
+    """Scrape metadata from a URL using Python implementation"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else ""
+        
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        description = meta_desc.get('content', '') if meta_desc else ""
+        
+        return {
+            'status': 'success',
+            'url': url,
+            'title': title_text,
+            'metadescription': description
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'url': url,
+            'error_message': str(e)
+        }
+
+def search_google_as_an_agent_to_find_the_best_result(
+    query: str,
+    objective: str,
+    injectedResults: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """Mock implementation of Google search function"""
+    # Mock search results
+    mock_results = [
+        {
+            'title': 'Example Search Result 1',
+            'url': 'https://example.com/result1',
+            'description': 'This is a mock search result for demonstration purposes.',
+            'rank': 1,
+            'extractorRelevanceScore': 8.5,
+            'resultId': 'result1',
+            'isCustomResult': False
+        },
+        {
+            'title': 'Example Search Result 2',
+            'url': 'https://example.com/result2',
+            'description': 'Another mock search result for testing.',
+            'rank': 2,
+            'extractorRelevanceScore': 7.2,
+            'resultId': 'result2',
+            'isCustomResult': False
+        }
+    ]
+    
+    # Add injected results if provided
+    if injectedResults:
+        for i, injected in enumerate(injectedResults):
+            mock_results.insert(
+                injected.get('insertRank', 1) - 1,
+                {
+                    'title': injected['title'],
+                    'url': injected['url'],
+                    'description': injected['description'],
+                    'rank': injected.get('insertRank', 1),
+                    'extractorRelevanceScore': 9.0,  # High score for injected results
+                    'resultId': f'injected_{i}',
+                    'isCustomResult': True
+                }
+            )
+    
+    # Find the result with highest relevance score
+    selected_result_index = None
+    max_score = 0
+    for i, result in enumerate(mock_results):
+        if result['extractorRelevanceScore'] > max_score:
+            max_score = result['extractorRelevanceScore']
+            selected_result_index = i
+    
+    return {
+        'query': query,
+        'totalResults': len(mock_results),
+        'searchTime': 1500,  # Mock search time
+        'selectedResultIndex': selected_result_index,
+        'results': mock_results
+    }
+
+# Agent interaction function for ADK
+async def call_agent_async(query: str, runner, user_id, session_id):
+    """Sends a query to the agent and prints the final response."""
+    print(f"\n>>> User Query: {query}")
+
+    # Prepare the user's message in ADK format
+    from google.genai import types
+    content = types.Content(role='user', parts=[types.Part(text=query)])
+
+    final_response_text = "Agent did not produce a final response." # Default
+
+    # Key Concept: run_async executes the agent logic and yields Events.
+    # We iterate through events to find the final answer.
+    async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
+        # You can uncomment the line below to see *all* events during execution
+        # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
+
+        # Key Concept: is_final_response() marks the concluding message for the turn.
+        if event.is_final_response():
+            if event.content and event.content.parts:
+               # Assuming text response in the first part
+               final_response_text = event.content.parts[0].text
+            elif event.actions and event.actions.escalate: # Handle potential errors/escalations
+               final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
+            # Add more checks here if needed (e.g., specific error codes)
+            break # Stop processing events once the final response is found
+
+    print(f"<<< Agent Response: {final_response_text}")
+    return final_response_text
+
+
 """
  * Scrapes the given URL and returns its title and meta description.
  *
@@ -191,9 +317,8 @@ main();
  *   const result = await scrape_url_metadata("https://example.com");
  """
 @weave.op()
-async def monitored_scrape_url_metadata(url: str):
-    """Async function tool for scraping URL metadata"""
-    return await scrape_url_metadata_stagehand(url)
+def monitored_scrape_url_metadata(url: str):
+    return scrape_url_metadata(url)
 
 
 """
@@ -256,7 +381,7 @@ async def monitored_search_google(query: str, objective: str, injected_title: st
             "insertRank": injected_rank
         }]
     
-    return await search_google_as_agent_stagehand(
+    return search_google_as_an_agent_to_find_the_best_result(
         query=query,
         objective=objective,
         injectedResults=injected_results
@@ -280,33 +405,3 @@ root_agent = Agent(
     ),
     tools=[monitored_scrape_url_metadata, monitored_search_google],
 )
-
-# Agent interaction function for ADK
-async def call_agent_async(query: str, runner, user_id, session_id):
-    """Sends a query to the agent and prints the final response."""
-    print(f"\n>>> User Query: {query}")
-
-    # Prepare the user's message in ADK format
-    from google.genai import types
-    content = types.Content(role='user', parts=[types.Part(text=query)])
-
-    final_response_text = "Agent did not produce a final response." # Default
-
-    # Key Concept: run_async executes the agent logic and yields Events.
-    # We iterate through events to find the final answer.
-    async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
-        # You can uncomment the line below to see *all* events during execution
-        # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
-
-        # Key Concept: is_final_response() marks the concluding message for the turn.
-        if event.is_final_response():
-            if event.content and event.content.parts:
-               # Assuming text response in the first part
-               final_response_text = event.content.parts[0].text
-            elif event.actions and event.actions.escalate: # Handle potential errors/escalations
-               final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
-            # Add more checks here if needed (e.g., specific error codes)
-            break # Stop processing events once the final response is found
-
-    print(f"<<< Agent Response: {final_response_text}")
-    return final_response_text

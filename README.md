@@ -13,38 +13,44 @@ LLMBait is a revolutionary tool that simulates how AI agents interact with searc
 Our platform allows content owners to:
 - Test how AI agents perceive their search result titles and meta descriptions
 - Inject custom search results into Google searches to see if agents would click on them
-- Monitor agent behavior in real-time using browser automation
 - Optimize content specifically for AI agent interactions, not just human users
+- Monitor agent behavior in real-time using browser automation (locally, production coming soon)
 
 ## How we built it
 - **Google Cloud ADK**: Powers our intelligent agents with state-of-the-art AI models
 - **Weave**: Provides comprehensive monitoring and analytics for agent behavior
-- **Fly.io**: Hosting platform that enables us to spin up concurrent agents for parallel testing
 - **BrowserBase / Stagehand**: Core browser automation functionality that simulates real agent interactions
 
 The system combines TypeScript backend for browser automation with Python agents for intelligent decision-making, creating a seamless bridge between AI agents and web content testing.
 
 ## Challenges we ran into
 - Integrating multiple AI agent frameworks (Google ADK, Stagehand) into a cohesive system
-- Managing concurrent browser sessions for parallel agent testing
-- Ensuring realistic agent behavior that mirrors actual AI assistant interactions
-- Balancing speed and accuracy in agent decision-making processes
+- Ensuring realistic agent behavior that mirrors actual AI assistant interactions (injection scripts will have more features soon!)
+- Balancing speed and accuracy in agent decision-making processes (plans to offload to Fly.io for rapid concurrent runs)
+- Managing concurrent browser sessions for parallel agent testing (work in progress)
 
-## Accomplishments that we're proud of
-- Successfully created a working prototype that can simulate AI agent interactions with search results
+## Accomplishments that I'm proud of
+- Successfully created a working prototype that can simulate AI agent interactions with search results with custom result injections
 - Built a modular system that can test different agent behaviors and decision-making patterns
 - Implemented real-time monitoring of agent actions using Weave
 - Developed a scalable architecture that can handle multiple concurrent agent sessions
 
-## What we learned
+## Key Takeaways
 - AI agents have fundamentally different interaction patterns than human users
 - Traditional SEO metrics don't translate well to agentic search behavior
 - Real browser automation is crucial for authentic agent simulation
 - The future of content optimization will require agent-specific strategies
+
+## What I learned
+- ADK — no prior experience
+- BrowserBase, Stagehand, Playwright - no prior experience
+- Weave - no prior experience
 
 ## What's next for LLMBait
 - Expand agent types to include different AI assistant personalities
 - Add support for testing across multiple search engines beyond Google
 - Implement A/B testing frameworks specifically designed for agent interactions
 - Develop predictive models for agent behavior based on content characteristics
-- Create a marketplace for agent-optimized content templates
+
+## Bonus
+This was a 1 day (4.5 hour) solo project! 

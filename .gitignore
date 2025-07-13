@@ -1,3 +1,4 @@
 *.env*
 .venv
 *.cpython*
+DEPLOY.md
