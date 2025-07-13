@@ -1,7 +1,7 @@
 # LLMBait
 
 Access demo at: 
-https://weavehacks2025.romethorstenson.com
+http://weavehacks2025.romethorstenson.com
 
 
 ## Inspiration
