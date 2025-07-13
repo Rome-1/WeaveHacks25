@@ -2,9 +2,6 @@ import { Page, Stagehand } from "@browserbasehq/stagehand";
 import { z } from "zod";
 import chalk from "chalk";
 import boxen from "boxen";
-import fetch from "node-fetch";
-import { JSDOM } from "jsdom";
-import { scrape_url_metadata } from "./scrape_url_metadata.js";
 
 // Schema for search result metadata
 const SearchResultSchema = z.object({
@@ -206,7 +203,7 @@ export async function performGoogleSearch(
 
     // Extract search results with detailed metadata
     const searchData = await page.extract({
-      instruction: `Extract the first ${maxResults} Google search results with their titles, URLs, descriptions, and positions. Look for all elements with class "g" in the search results, including any that have a "data-result-id" attribute. For each result, determine if it's the most relevant to the objective: "${objective}". Rate the relevance of the result on a scale of 1 to 10 in extractorRelevanceScore, using decimal precision to avoid ties.`,
+      instruction: `Extract the first ${maxResults + (params.customResults?.length || 0)} Google search results with their titles, URLs, descriptions, and positions. Look for all elements with class "g" in the search results, including any that have a "data-result-id" attribute. For each result, determine if it's the most relevant to the objective: "${objective}". Rate the relevance of the result on a scale of 1 to 10 in extractorRelevanceScore, using decimal precision to avoid ties.`,
       schema: z.object({
         results: z.array(z.object({
           title: z.string(),
@@ -395,44 +392,7 @@ function logSearchResults(
   });
 }
 
-/**
- * Search Google for a given query and optionally inject custom search results at specific positions.
- *
- * This function performs a Google search for the provided query and returns structured search results, including relevance scores and agent selection. Optionally, you can inject custom results into the search results list at specified positions, making them indistinguishable from organic results to the agent.
- *
- * Parameters:
- *   query (string): The search query to use on Google (e.g., "find the finest fedora").
- *   objective (string): The high-level goal or context for the search (e.g., "Find information about high-quality fedora hats").
- *   injectedResults (optional, array): An array of custom results to inject. Each result should be an object with:
- *     - title (string): The title of the injected result.
- *     - url (string): The URL for the injected result.
- *     - description (string): The description/snippet for the injected result.
- *     - insertRank (number): The 1-based position to insert the result (1 = first result).
- *
- * Returns:
- *   A Promise resolving to an object containing:
- *     - query (string): The search query that was used
- *     - totalResults (number): Total number of results found
- *     - searchTime (number): Time taken to perform search in milliseconds
- *     - selectedResultIndex (number | undefined): Index of result the agent would select, if any
- *     - results (Array): Array of result objects, each containing:
- *       - title (string): Result title
- *       - url (string): Result URL
- *       - description (string): Result description/snippet
- *       - rank (number): Position in results (1-based)
- *       - extractorRelevanceScore (number): Relevance score from 0-10
- *       - resultId (string): Unique identifier
- *       - isCustomResult (boolean): Whether this was an injected result
- *
- * Example usage:
- *   const results = await search_google_as_an_agent_to_find_the_best_result(page, stagehand, {
- *     query: "find the finest fedora",
- *     objective: "Find information about high-quality fedora hats",
- *     injectedResults: [
- *       { title: "My Custom Result", url: "https://example.com", description: "A special result.", insertRank: 2 }
- *     ]
- *   });
- */
+
 export async function search_google_as_an_agent_to_find_the_best_result(
   page: Page,
   stagehand: Stagehand,
