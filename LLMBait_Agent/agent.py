@@ -23,55 +23,41 @@ async def stagehand_act(url: str, action: str) -> dict:
     await sh.close()
     return result
 
-async def scrape_url_metadata_stagehand(url: str) -> Dict[str, Any]:
+def scrape_url_metadata_simple(url: str) -> Dict[str, Any]:
     """
-    Scrape metadata from a URL using Stagehand.
+    Scrape metadata from a URL using requests and BeautifulSoup.
     """
-    # Create a temporary script to call the TypeScript function
-    script_content = f"""
-import {{ scrape_url_metadata }} from '../LLMBait/scrape_url_metadata.js';
-
-async function main() {{
-    try {{
-        const result = await scrape_url_metadata("{url}");
-        console.log(JSON.stringify(result));
-    }} catch (error) {{
-        console.error(JSON.stringify({{ error: error.message }}));
-        process.exit(1);
-    }}
-}}
-
-main();
-"""
-    
-    # Write temporary script
-    temp_script = "temp_scrape.js"
-    with open(temp_script, 'w') as f:
-        f.write(script_content)
+    import requests
+    from bs4 import BeautifulSoup
     
     try:
-        # Run the script using Node.js
-        import subprocess
-        result = subprocess.run(
-            ['node', temp_script],
-            cwd=os.path.join(os.path.dirname(__file__), '..', 'LLMBait'),
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
         
-        if result.returncode != 0:
-            return {
-                'status': 'error',
-                'url': url,
-                'error_message': result.stderr
-            }
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        return json.loads(result.stdout.strip())
-    finally:
-        # Clean up
-        if os.path.exists(temp_script):
-            os.remove(temp_script)
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else ""
+        
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        description = meta_desc.get('content', '') if meta_desc else ""
+        
+        return {
+            'status': 'success',
+            'url': url,
+            'title': title_text,
+            'metadescription': description
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'url': url,
+            'error_message': str(e)
+        }
 
 async def search_google_as_agent_stagehand(
     query: str,
@@ -85,7 +71,7 @@ async def search_google_as_agent_stagehand(
     injected_results_json = json.dumps(injectedResults) if injectedResults else "null"
     
     script_content = f"""
-import {{ search_google_as_an_agent_to_find_the_best_result }} from './googleSearch.js';
+import {{ search_google_as_an_agent_to_find_the_best_result }} from './dist/googleSearch.js';
 
 async function main() {{
     try {{
@@ -138,8 +124,9 @@ async function main() {{
 main();
 """
     
-    # Write temporary script
-    temp_script = "temp_search.js"
+    # Write temporary script in the LLMBait directory
+    llmbait_dir = os.path.join(os.path.dirname(__file__), '..', 'LLMBait')
+    temp_script = os.path.join(llmbait_dir, "temp_search.js")
     with open(temp_script, 'w') as f:
         f.write(script_content)
     
@@ -147,8 +134,8 @@ main();
         # Run the script using Node.js
         import subprocess
         result = subprocess.run(
-            ['node', temp_script],
-            cwd=os.path.join(os.path.dirname(__file__), '..', 'LLMBait'),
+            ['node', 'temp_search.js'],
+            cwd=llmbait_dir,
             capture_output=True,
             text=True,
             timeout=60
@@ -192,7 +179,7 @@ main();
 @weave.op()
 async def monitored_scrape_url_metadata(url: str):
     """Async function tool for scraping URL metadata"""
-    return await scrape_url_metadata_stagehand(url)
+    return scrape_url_metadata_simple(url)
 
 
 """

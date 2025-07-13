@@ -5,172 +5,116 @@ from google.adk.agents import Agent
 import asyncio
 import os
 import json
-from stagehand import Stagehand, StagehandConfig
 from typing import Optional, List, Dict, Any
 import requests
 from bs4 import BeautifulSoup
 
 weave.init('content-owner-search-optimizer')  # 🐝 New W&B project
 
-async def stagehand_act(url: str, action: str) -> dict:
-    cfg = StagehandConfig(env="BROWSERBASE")     # reads env vars
-    sh = Stagehand(cfg)
-    await sh.init()
 
-    if url:
-        await sh.page.goto(url)
-    result = await sh.page.act(action)           # same API as TS
-    await sh.close()
-    return result
 
-async def scrape_url_metadata_stagehand(url: str) -> Dict[str, Any]:
+def scrape_url_metadata_simple(url: str) -> Dict[str, Any]:
     """
-    Scrape metadata from a URL using Stagehand.
+    Scrape metadata from a URL using requests and BeautifulSoup.
     """
-    # Create a temporary script to call the TypeScript function
-    script_content = f"""
-import {{ scrape_url_metadata }} from '../LLMBait/scrape_url_metadata.js';
-
-async function main() {{
-    try {{
-        const result = await scrape_url_metadata("{url}");
-        console.log(JSON.stringify(result));
-    }} catch (error) {{
-        console.error(JSON.stringify({{ error: error.message }}));
-        process.exit(1);
-    }}
-}}
-
-main();
-"""
-    
-    # Write temporary script in the LLMBait directory
-    llmbait_dir = os.path.join(os.path.dirname(__file__), '..', 'LLMBait')
-    temp_script = os.path.join(llmbait_dir, "temp_scrape.js")
-    with open(temp_script, 'w') as f:
-        f.write(script_content)
+    import requests
+    from bs4 import BeautifulSoup
     
     try:
-        # Run the script using Node.js
-        import subprocess
-        result = subprocess.run(
-            ['node', 'temp_scrape.js'],
-            cwd=llmbait_dir,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
         
-        if result.returncode != 0:
-            return {
-                'status': 'error',
-                'url': url,
-                'error_message': result.stderr
-            }
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        return json.loads(result.stdout.strip())
-    finally:
-        # Clean up
-        if os.path.exists(temp_script):
-            os.remove(temp_script)
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else ""
+        
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        description = meta_desc.get('content', '') if meta_desc else ""
+        
+        return {
+            'status': 'success',
+            'url': url,
+            'title': title_text,
+            'metadescription': description
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'url': url,
+            'error_message': str(e)
+        }
 
-async def search_google_as_agent_stagehand(
+def search_google_simple(
     query: str,
     objective: str,
     injectedResults: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
-    Search Google as an agent using Stagehand.
+    Simple mock search function that simulates Google search results.
     """
-    # Create a temporary script to call the TypeScript function
-    injected_results_json = json.dumps(injectedResults) if injectedResults else "null"
+    # Create mock search results
+    mock_results = [
+        {
+            "title": "Premium Fedora Collection - Handcrafted Excellence",
+            "url": "https://example.com/premium-fedoras",
+            "description": "Discover our exclusive collection of handcrafted fedoras made from the finest materials.",
+            "rank": 1,
+            "extractorRelevanceScore": 9.2,
+            "resultId": "result1",
+            "isCustomResult": False
+        },
+        {
+            "title": "Luxury Fedora Guide - How to Choose the Perfect Hat",
+            "url": "https://example.com/fedora-guide",
+            "description": "Comprehensive guide to selecting the perfect fedora. Learn about materials, fit, and style.",
+            "rank": 2,
+            "extractorRelevanceScore": 8.7,
+            "resultId": "result2",
+            "isCustomResult": False
+        },
+        {
+            "title": "Best Fedora Hats 2024 - Top Rated Quality Hats",
+            "url": "https://example.com/best-fedoras",
+            "description": "Find the best fedora hats of 2024. Expert reviews and recommendations for quality hats.",
+            "rank": 3,
+            "extractorRelevanceScore": 8.1,
+            "resultId": "result3",
+            "isCustomResult": False
+        }
+    ]
     
-    script_content = f"""
-import {{ search_google_as_an_agent_to_find_the_best_result }} from './googleSearch.js';
-
-async function main() {{
-    try {{
-        // Mock page and stagehand for now since we can't easily pass them from Python
-        const mockPage = {{
-            act: async (action) => console.log('Mock act:', action),
-            goto: async (url) => console.log('Mock goto:', url),
-            extract: async (params) => {{
-                console.log('Mock extract:', params);
-                return {{
-                    results: [
-                        {{
-                            title: 'Mock Search Result',
-                            url: 'https://example.com',
-                            description: 'This is a mock result',
-                            rank: 1,
-                            extractorRelevanceScore: 8.5,
-                            resultId: 'mock1'
-                        }}
-                    ],
-                    totalResults: 1
-                }};
-            }},
-            observe: async (params) => {{
-                console.log('Mock observe:', params);
-                return [{{ selector: 'mock-selector' }}];
-            }}
-        }};
-        
-        const mockStagehand = {{
-            log: (data) => console.log('Mock log:', data)
-        }};
-        
-        const result = await search_google_as_an_agent_to_find_the_best_result(
-            mockPage,
-            mockStagehand,
-            {{
-                query: "{query}",
-                objective: "{objective}",
-                injectedResults: {injected_results_json}
-            }}
-        );
-        console.log(JSON.stringify(result));
-    }} catch (error) {{
-        console.error(JSON.stringify({{ error: error.message }}));
-        process.exit(1);
-    }}
-}}
-
-main();
-"""
-    
-    # Write temporary script in the LLMBait directory
-    llmbait_dir = os.path.join(os.path.dirname(__file__), '..', 'LLMBait')
-    temp_script = os.path.join(llmbait_dir, "temp_search.js")
-    with open(temp_script, 'w') as f:
-        f.write(script_content)
-    
-    try:
-        # Run the script using Node.js
-        import subprocess
-        result = subprocess.run(
-            ['node', 'temp_search.js'],
-            cwd=llmbait_dir,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        
-        if result.returncode != 0:
-            return {
-                'error': result.stderr,
-                'query': query,
-                'totalResults': 0,
-                'searchTime': 0,
-                'selectedResultIndex': None,
-                'results': []
+    # Insert injected results if provided
+    if injectedResults:
+        for injected in injectedResults:
+            insert_rank = injected.get('insertRank', 1)
+            # Insert at the specified position (1-based index)
+            insert_index = min(insert_rank - 1, len(mock_results))
+            injected_result = {
+                "title": injected.get('title', ''),
+                "url": injected.get('url', ''),
+                "description": injected.get('description', ''),
+                "rank": insert_rank,
+                "extractorRelevanceScore": 9.5,  # High score for injected results
+                "resultId": f"injected_{insert_rank}",
+                "isCustomResult": True
             }
-        
-        return json.loads(result.stdout.strip())
-    finally:
-        # Clean up
-        if os.path.exists(temp_script):
-            os.remove(temp_script)
+            mock_results.insert(insert_index, injected_result)
+    
+    # Simulate agent selection (for now, select the first result)
+    selected_result_index = 0
+    
+    return {
+        "query": query,
+        "totalResults": len(mock_results),
+        "searchTime": 1500,  # Mock search time
+        "selectedResultIndex": selected_result_index,
+        "results": mock_results
+    }
 
 """
  * Scrapes the given URL and returns its title and meta description.
@@ -194,7 +138,7 @@ main();
 @weave.op()
 async def monitored_scrape_url_metadata(url: str):
     """Async function tool for scraping URL metadata"""
-    return await scrape_url_metadata_stagehand(url)
+    return scrape_url_metadata_simple(url)
 
 
 """
@@ -257,7 +201,7 @@ async def monitored_search_google(query: str, objective: str, injected_title: st
             "insertRank": injected_rank
         }]
     
-    return await search_google_as_agent_stagehand(
+    return search_google_simple(
         query=query,
         objective=objective,
         injectedResults=injected_results

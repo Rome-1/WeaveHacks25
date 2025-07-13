@@ -1,5 +1,10 @@
 # LLMBait
 
+Access demo at: 
+weavehacks2025.romethorstenson.com
+https://adk-default-service-name-462838358362.us-central1.run.app
+
+
 ## Inspiration
 I've been building sites and doing SEO since elementary school. I've seen the highs and the lows. SEO has been dead for years, but with massive amounts of content comes boons too—we can automate testing like we could never do with people.
 
