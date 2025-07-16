@@ -209,7 +209,7 @@ async def monitored_search_google(query: str, objective: str, injected_title: st
 
 root_agent = Agent(
     name="LLMBait",
-    model="gemini-1.5-pro",
+    model="gemini-2.0-flash-001",
     description=(
         "Helps content owners trial and select titles/metadescriptions for their pages. "
         "Simulates how a browser agent would choose among Google search results, "

@@ -1,7 +1,7 @@
 # LLMBait
 
 Access demo at: 
-http://weavehacks2025.romethorstenson.com
+http://weavehacks2025.romethorstenson.com (no longer live to avoid excessive AI costs!)
 
 
 ## Inspiration
